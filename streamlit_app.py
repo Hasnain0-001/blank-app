@@ -2,75 +2,66 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 import nltk
-from nltk import ngrams
+from nltk.tokenize import word_tokenize
 from collections import Counter
-import string
 
-# Download the NLTK punkt tokenizer if needed
+# Ensure the 'punkt' tokenizer is downloaded
 nltk.download('punkt')
 
-# Streamlit app title
-st.title("N-Gram Analyzer for Top-Ranking URLs")
-
-# Function to fetch webpage content
-def get_webpage_content(url):
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            return soup.get_text()
-        else:
-            st.error(f"Failed to fetch {url}. Status code: {response.status_code}")
-            return ""
-    except Exception as e:
-        st.error(f"Error fetching {url}: {e}")
-        return ""
+# Function to fetch page content
+def fetch_page_content(url):
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.text
+    else:
+        return None
 
 # Function to clean and tokenize text
 def clean_and_tokenize(text):
-    text = text.lower().translate(str.maketrans('', '', string.punctuation))
     tokens = nltk.word_tokenize(text)
+    tokens = [token.lower() for token in tokens if token.isalnum()]  # Remove punctuation and lowercase
     return tokens
 
-# Function to extract n-grams
+# Function to extract n-grams from tokens
 def extract_ngrams(tokens, n):
-    return ngrams(tokens, n)
+    ngrams = zip(*[tokens[i:] for i in range(n)])
+    return [' '.join(ngram) for ngram in ngrams]
 
-# Function to count n-grams
-def get_ngram_counts(tokens, n, top_n=10):
-    n_grams = extract_ngrams(tokens, n)
-    return Counter(n_grams).most_common(top_n)
+# Streamlit app
+st.title('N-gram Extractor from Top Ranking URLs')
 
-# Input fields for URLs
-st.write("Enter the top 3 URLs you want to analyze:")
-url_1 = st.text_input("Enter URL 1")
-url_2 = st.text_input("Enter URL 2")
-url_3 = st.text_input("Enter URL 3")
+# Input: URLs
+url1 = st.text_input("Enter URL 1:")
+url2 = st.text_input("Enter URL 2:")
+url3 = st.text_input("Enter URL 3:")
 
-# Input for the targeted query
-query = st.text_input("Enter the targeted query:")
+# Input: Query
+query = st.text_input("Enter Target Query:")
 
-# Button to analyze n-grams
-if st.button("Analyze N-Grams"):
-    if url_1 and url_2 and url_3 and query:
-        urls = [url_1, url_2, url_3]
-        combined_tokens = []
+# Select n-gram size
+n = st.slider("Select n-gram size:", 1, 5, 2)
 
-        # Fetch and combine tokens from all 3 URLs
-        for url in urls:
-            content = get_webpage_content(url)
-            tokens = clean_and_tokenize(content)
-            combined_tokens.extend(tokens)
+# Button to run the extraction
+if st.button('Extract N-grams'):
+    urls = [url1, url2, url3]
+    all_tokens = []
 
-        # Display the n-grams for unigrams, bigrams, trigrams
-        st.write(f"\nAnalyzing n-grams for the query: {query}")
+    for url in urls:
+        if url:
+            content = fetch_page_content(url)
+            if content:
+                soup = BeautifulSoup(content, 'html.parser')
+                text = soup.get_text()
+                tokens = clean_and_tokenize(text)
+                all_tokens.extend(tokens)
 
-        # Loop through unigrams, bigrams, trigrams
-        for n in range(1, 4):
-            st.write(f"\nTop {n}-grams:")
-            ngram_counts = get_ngram_counts(combined_tokens, n)
-            for ngram, count in ngram_counts:
-                st.write(f"{' '.join(ngram)}: {count}")
+    # Extract n-grams and display the most common ones
+    if all_tokens:
+        ngrams = extract_ngrams(all_tokens, n)
+        ngram_freq = Counter(ngrams)
+        st.write(f"Top {n}-grams for the query '{query}':")
+        st.write(ngram_freq.most_common(10))
     else:
-        st.error("Please fill in all URLs and the query before analyzing.")
+        st.write("Could not fetch content from the URLs.")
+
 
